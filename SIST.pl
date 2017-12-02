@@ -1,6 +1,6 @@
 ####################
 # SIST: Separate Accugenomics Spike-In reads
-# Version 1.00
+# Version 1.01
 # 
 # #### Updates: ####
 # #### End of Updates ###
@@ -113,7 +113,7 @@ if (! -f 'Refs/genome.fa' && $slow ne 'false'){
 	exit 0;
 }
 
-if (! -f 'Refs/genome.dict' && $slow ne 'false'){
+if (! -f 'Refs/genome.dict' && $slow ne 'false' && $eval){
 	print('Missing human reference genome dictionary. create a link of human reference genome dictionary (by picard) as Refs/genome.dict'."\n");
 	exit 0;
 }
@@ -571,7 +571,7 @@ if ($type eq 'all' || $type eq 'gzip'){
 	my $count_pair_1=0;
 	while(<FH>){
 		my $line = $_;
-		if (/^@(\S+)\s(\S+)/){
+		if (/^@(\S+)[\s\/]+(\S+)/){
 			my $array=$1;
 			if (exists $spike_in_reads{$array}){
 				$count_pair_1++;
