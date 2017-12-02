@@ -596,7 +596,7 @@ if ($type eq 'all' || $type eq 'gzip'){
 	# my $count_pair_2=0;
 	while(<FH>){
 		my $line = $_;
-		if (/^@(\S+)\s(\S+)/){
+		if (/^@(\S+)[\s\/]+(\S+)/){
 			my $array=$1;
 			if (exists $spike_in_reads{$array}){
 				# $count_pair_2++;
