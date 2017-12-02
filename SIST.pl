@@ -564,7 +564,7 @@ if ($type eq 'all' || $type eq 'gzip'){
 	
 	# separating fastq file 1
 	print ('Extracting Reads... (Pair - 1)'."\n");
-	open(FH,'zcat '.$SAMPLE_1.'|');
+	open(FH,'gzip -cd '.$SAMPLE_1.'|');
 	open(OFH_spike,'>'.$spike_fastq_1);
 	open(OFH_origin,'>'.$origin_fastq_1);
 	my $signal = 0;
@@ -589,7 +589,7 @@ if ($type eq 'all' || $type eq 'gzip'){
 	
 	# separating fastq file 2
 	print ('Extracting Reads... (Pair - 2)'."\n");
-	open(FH,'zcat '.$SAMPLE_2.'|');
+	open(FH,'gzip -cd '.$SAMPLE_2.'|');
 	open(OFH_spike,'>'.$spike_fastq_2);
 	open(OFH_origin,'>'.$origin_fastq_2);
 	my $signal = 0;
