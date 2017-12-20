@@ -1,8 +1,17 @@
 # SIST: Separate Accugenomics Spike-In reads
 ## Version 1.00
 
-## Help Page
+## Introduction
+
+Spike-In Separation Toolbox (SIST) is developed for separate Accugenomics sequencing spike-in controls (reads） from original sample reads. The separation is majorly based on the unique characteristics of spike-in controls, which contains several di-nucleotides inside the target region.  
+
+This toolbox has been specificially designed and used in *Sequencing Quality Control 2* project - Working Group II for the purpose of target sequencing quality control. To read more details about SEQC2 project, please visit [here](https://www.fda.gov/ScienceResearch/BioinformaticsTools/MicroarrayQualityControlProject/ucm507935.htm)   
+
+## Tool Manual (Help) Page
 use `perl SIST.pl -help` to get help information.
+
+#### **Note**
+During to privacy concern, currently the reference of Accugenomics Spike-in Control are not released. This tool **CANNOT** be ran successfully without the specific refernece genome. If you are project related person, please contact [Leihong](mailto:leihong.wu@fda.hhs.gov) for further assistance.  
 
 ## Usage: 
  SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz> -O <output_prefix> ] [options] [-help] [-eval]
