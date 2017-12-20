@@ -14,7 +14,7 @@ use `perl SIST.pl -help` to get help information.
 During to privacy concern, currently the reference of Accugenomics Spike-in Control are not released. This tool **CANNOT** be ran successfully without the specific refernece genome. If you are project related person, please contact [Leihong](mailto:leihong.wu@fda.hhs.gov) for further assistance.  
 
 ## Usage: 
- SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz> -O <output_prefix> ] [options] [-help] [-eval]
+ `SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz> -O <output_prefix> ] [options] [-help] [-eval]`
 	
 	where:
 	-fastq_1  paired-end reads 1 (required)
@@ -38,18 +38,18 @@ During to privacy concern, currently the reference of Accugenomics Spike-in Cont
 
 ## Example 
 
-perl SIST.pl -test_pos (embeded spike-in sample; Roche Batch2 S8)
+`perl SIST.pl -test_pos` (embeded spike-in sample; Roche Batch2 S8)
 	fastq_1: /SEQC2/upload/171003_SEQC2_Hyperplus_SIC_170bp/sample4rep2_S8_L001_R1_001.fastq.gz
 	fastq_2: /SEQC2/upload/171003_SEQC2_Hyperplus_SIC_170bp/sample4rep2_S8_L001_R2_001.fastq.gz
 
 Equals to :
-perl SIST.pl -fastq_1=data/test_pos_2_1.fastq.gz -fastq_2=data/test_pos_2_2.fastq.gz -O=test_pos_2 -type=match
+`perl SIST.pl -fastq_1=data/test_pos_2_1.fastq.gz -fastq_2=data/test_pos_2_2.fastq.gz -O=test_pos_2 -type=match`
 	
 ##	
 	
-perl SIST.pl -test_neg (embeded negative sample; Roche Batch2 S1)
+`perl SIST.pl -test_neg` (embeded negative sample; Roche Batch2 S1)
 	fastq_1: /SEQC2/upload/171003_SEQC2_Hyperplus_SIC_170bp/sample1rep1_S1_L001_R1_001.fastq.gz
 	fastq_2: /SEQC2/upload/171003_SEQC2_Hyperplus_SIC_170bp/sample1rep1_S1_L001_R2_001.fastq.gz
 
 Equals to :
-perl SIST.pl -fastq_1=data/test_neg_2_1.fastq.gz -fastq_2=data/test_neg_2_2.fastq.gz -O=test_neg_2 -type=match
+`perl SIST.pl -fastq_1=data/test_neg_2_1.fastq.gz -fastq_2=data/test_neg_2_2.fastq.gz -O=test_neg_2 -type=match`
