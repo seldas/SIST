@@ -3,6 +3,7 @@
 # Version 1.01
 # 
 # #### Updates: ####
+# 12/02/2017: Fix a Bug about read head detection in FASTQ file generation step. (ver. 1.00 -> 1.01)
 # #### End of Updates ###
 #
 # Contact leihong.wu@fda.hhs.gov for further assistance.
@@ -569,17 +570,21 @@ if ($type eq 'all' || $type eq 'gzip'){
 	open(OFH_origin,'>'.$origin_fastq_1);
 	my $signal = 0;
 	my $count_pair_1=0;
+	my $read_line_i = 0;
 	while(<FH>){
 		my $line = $_;
-		if (/^@(\S+)[\s\/]+(\S+)/){
-			my $array=$1;
-			if (exists $spike_in_reads{$array}){
-				$count_pair_1++;
-				$signal = 1;
-			}else{
-				$signal = 0;
+		if ($read_line_i % 4 ==0){ # only test on the head line
+			# Casava 1.8 format || Illumina reads ends with /1 or /2
+			if (/^@(\S+)\s(\S+)/ || /^@(\S+)\/[12]$/){
+				my $array=$1;
+				if (exists $spike_in_reads{$array}){
+					$count_pair_1++;
+					$signal = 1;
+				}else{
+					$signal = 0;
+				}
 			}
-		} 
+		}
 		print OFH_spike $line if ($signal ==1);
 		print OFH_origin $line if ($signal ==0);
 	}
@@ -592,19 +597,24 @@ if ($type eq 'all' || $type eq 'gzip'){
 	open(FH,'gzip -cd '.$SAMPLE_2.'|');
 	open(OFH_spike,'>'.$spike_fastq_2);
 	open(OFH_origin,'>'.$origin_fastq_2);
-	my $signal = 0;
+	$signal = 0;
 	# my $count_pair_2=0;
+	$read_line_i = 0;
 	while(<FH>){
 		my $line = $_;
-		if (/^@(\S+)[\s\/]+(\S+)/){
-			my $array=$1;
-			if (exists $spike_in_reads{$array}){
-				# $count_pair_2++;
-				$signal = 1;
-			}else{
-				$signal = 0;
+		if ($read_line_i % 4 ==0){ # head line
+			# Casava 1.8 format || Illumina reads ends with /1 or /2
+			if (/^@(\S+)\s(\S+)/ || /^@(\S+)\/[12]$/){
+				my $array=$1;
+				if (exists $spike_in_reads{$array}){
+					# $count_pair_2++;
+					$signal = 1;
+				}else{
+					$signal = 0;
+				}
 			}
-		} 
+		}
+		$read_line_i = $read_line_i + 1 ;
 		print OFH_spike $line if ($signal ==1);
 		print OFH_origin $line if ($signal ==0);
 	}
