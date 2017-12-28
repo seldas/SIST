@@ -585,6 +585,7 @@ if ($type eq 'all' || $type eq 'gzip'){
 				}
 			}
 		}
+		$read_line_i = $read_line_i + 1 ;
 		print OFH_spike $line if ($signal ==1);
 		print OFH_origin $line if ($signal ==0);
 	}
