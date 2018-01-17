@@ -3,6 +3,7 @@
 # Version 1.01
 # 
 # #### Updates: ####
+# 01/04/2018: Support BAM input (Ver. 1.01 -> 1.10)
 # 12/02/2017: Fix a Bug about read head detection in FASTQ file generation step. (ver. 1.00 -> 1.01)
 # #### End of Updates ###
 #
@@ -17,11 +18,12 @@ use strict;
 # USAGE
 my $USAGE =<<USAGE;
 	Usage:
-	  SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz> -O <output_prefix> ] [options] [-help] [-eval]
+	  SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz> -bam <bam> -O <output_prefix> ] [options] [-help] [-eval]
 	
 	where:
-	-fastq_1  paired-end reads 1 (required)
-	-fastq_2  paired-end reads 2 (required)
+	-fastq_1  paired-end reads 1 (required if no bam input)
+	-fastq_2  paired-end reads 2 (required if no bam input)
+	-bam  input file as bam format (required if no fastq input)
 	-O	Output header (required)
 	
 	options:
@@ -44,7 +46,7 @@ USAGE
 ######################################################
 
 my $threads = 4;
-my $type = 'all'; # in default only do match
+my $type = 'all';
 my $BWA_B=6; # penalty for mismatch. default = 4 in BWA MEM for short reads
 my $BWA_O='20,20';	# penalty for indels. default = 6, high value because indels are highly not expected in spike-in sequence.
 my $map_score = 70; # at least mapped 100 bps in consecutive to the spike-in Reference. 
@@ -55,6 +57,7 @@ my $slow = 'true';
 GetOptions (   
              "fastq_1=s"    => \my $SAMPLE_1,
 			 "fastq_2=s"  	=> \my $SAMPLE_2,
+			 "bam=s"  	    => \my $BAM,
 			 "O=s"			=> \my $hq_header,
 			 "type=s"		=> \$type, 
 			 "t=s"			=> \$threads,
@@ -67,7 +70,9 @@ GetOptions (
 			 q(help)		=> \my $help,
 			 q(test_pos)		=> \my $test_pos, # used for development
 			 q(test_neg)		=> \my $test_neg, # used for development
-			 q(eval)		=> \my $eval
+			 q(test_bam)		=> \my $test_bam, # used for development
+			 q(eval)		=> \my $eval,
+			 q(keepBam)		=> \my $keepBam # Don't convert output file from bam to fastq; designed for ThermoFisher Data
 			 );            
 
 if ($help) {
@@ -75,7 +80,7 @@ if ($help) {
     exit 0;
 }
 
-# Test dataset 
+# dataset for test use
 if ($test_pos) {
 	# test Spike-in Sample
 	$SAMPLE_1='data/test_pos_2_1.fastq.gz';
@@ -84,7 +89,7 @@ if ($test_pos) {
 	$hq_header = $SAMPLE_1; 
 	$hq_header =~ s/_1\.fastq\.gz//g;
 	$hq_header =~ s/.*\///g;
-	$hq_header = $hq_header;
+	#$hq_header = $hq_header;
 }
 if ($test_neg) {		
 	# test 'Negative' Sample
@@ -94,21 +99,33 @@ if ($test_neg) {
 	$hq_header = $SAMPLE_1; 
 	$hq_header =~ s/_1\.fastq\.gz//g;
 	$hq_header =~ s/.*\///g;
-	$hq_header = $hq_header;
+	#$hq_header = $hq_header;
+}
+if ($test_bam) {		
+	# test 'Positive' Sample in BAM format
+	$BAM='data/test_pos.bam'; 
+
+	$hq_header = $BAM;
+	$hq_header =~ s/\.bam/_bam/g;	
+	$hq_header =~ s/.*\///g;
+	#$hq_header = $hq_header; 
 }
 
-## Check input availability.
+## Check BEGIN ###.
 
+# Check analysis type (-type)
 if ($type ne 'match' && $type ne 'all' && $type ne 'gzip' ){
 	print('Wrong type! should be one in [match, all, gzip] '."\n");
 	exit 0;
 }
 
+# Check Picard (only works when doing insert size measurement)
 if (! -f 'Refs/picard.jar' && $eval){
 	print('Missing Picard. create a link of picard  Refs/picard.jar'."\n");
 	exit 0;
 }
 
+# Check Reference Files 
 if (! -f 'Refs/genome.fa' && $slow ne 'false'){
 	print('Missing human reference genome file. create a link of human reference genome (e.g., hg38) as Refs/genome.fa'."\n");
 	exit 0;
@@ -123,32 +140,36 @@ if (! -f 'Refs/genome.fa.bwt' && $slow ne 'false'){
 	print('Missing human reference genome index. create a link of human reference genome dictionary (by BWA index) such as Refs/genome.fa.bwt, etc.'."\n");
 	exit 0;
 }
-	
-if (! $SAMPLE_1 ||! $SAMPLE_2 ||! -f $SAMPLE_1 ||! -f $SAMPLE_2 ||! $hq_header){	
-	print "Missing essential input files!\n";
-	if (! $SAMPLE_1) {
-		print "  FASTQ_1 file is not defined!\n" ;
-	}elsif (! -f $SAMPLE_1){
-		print "  FASTQ_1 file does not exist. Check if the input file name: ".$SAMPLE_1."\n";
-	}
-	
-	if (! $SAMPLE_2) {
-		print "  FASTQ_2 file is not defined!\n" ;
-	}elsif (! -f $SAMPLE_2){
-		print "  FASTQ_2 file does not exist. Check if the input file name: ".$SAMPLE_2."\n";
-	}
 
-	print "  Output file (prefix) is not defined.\n" if (! $hq_header);
-	print "Use -help to get more information.\n";
+# Check Input Files	
+if ( (!$BAM ||! -f $BAM) && (! $SAMPLE_1 ||! $SAMPLE_2 ||! -f $SAMPLE_1 ||! -f $SAMPLE_2)){	
+	print " Missing input files!\n";
+	print " Use -help to get more information.\n";
 	exit 0;
 }
 
-if ($SAMPLE_1 !~ /\.fa*s*t*q$/ && $SAMPLE_1 !~ /\.fa*s*t*q\.gz$/){
-	print "Not supported Fastq file format for Fastq_1! Must ended with .fastq[.gz] or .fq[.gz] \n";
-	exit 0;
+if ($BAM){
+	if ($BAM !~ /\.bam$/ ){
+		print "Not supported BAM input file format! Must ended with .bam \n";
+		exit 0;
+	}
 }
-if ($SAMPLE_2 !~ /\.fa*s*t*q$/ && $SAMPLE_2 !~ /\.fa*s*t*q\.gz$/){
-	print "Not supported Fastq file format for Fastq_2! Must ended with .fastq[.gz] or .fq[.gz] \n";
+
+if ($SAMPLE_1){
+	if ($SAMPLE_1 !~ /\.fa*s*t*q$/ && $SAMPLE_1 !~ /\.fa*s*t*q\.gz$/){
+		print "Not supported Fastq file format for Fastq_1! Must ended with .fastq[.gz] or .fq[.gz] \n";
+		exit 0;
+	}
+	if ($SAMPLE_2 !~ /\.fa*s*t*q$/ && $SAMPLE_2 !~ /\.fa*s*t*q\.gz$/){
+		print "Not supported Fastq file format for Fastq_2! Must ended with .fastq[.gz] or .fq[.gz] \n";
+		exit 0;
+	}
+}
+
+# Check Output Header
+if ( ! $hq_header){	
+	print " Missing output folder!\n";
+	print " Use -help to get more information.\n";
 	exit 0;
 }
 ###########CHECK END##########
@@ -161,9 +182,13 @@ my $sam_file = $hq_header.".sam";
 
 # those file only generated in all or gzip mode.
 my $spike_fastq_1 = $hq_header."_spikein_1.fastq";
-my $spike_fastq_2 = $hq_header."_spikein_2.fastq";
 my $origin_fastq_1 = $hq_header."_origin_1.fastq";
-my $origin_fastq_2 = $hq_header."_origin_2.fastq";
+
+$spike_fastq_1 = $hq_header."_spikein_1.bam" if ($keepBam);
+$origin_fastq_1 = $hq_header."_origin_1.bam" if ($keepBam);
+
+my $spike_fastq_2 = $hq_header."_spikein_2.fastq" if($SAMPLE_2);
+my $origin_fastq_2 = $hq_header."_origin_2.fastq" if($SAMPLE_2);
 
 # if output file already exists; overwrite it.
 print "Warning: ".$hq_file." already exists; will overwrite! \n" if (-f $hq_file);
@@ -194,6 +219,7 @@ open(OFH_SAM_SPK,'>'.$sam_file);
 my $stop_sign = 0; # early stop for testing larger files
 my %high_reads=();
 my %doubt_sam=();
+my %reliable_sam=();
 my %rep=();
 
 my %reads_count_total=();
@@ -210,7 +236,13 @@ $spk_count{'1'}=0;
 #print ("Finding Spike-in Reads ...\n");
 	
 # Find all mapped reads (candidate spike-in reads) from original read set.
-open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' '.$SAMPLE_2.' 2>>tmp/bwa_run.log|');
+if ($SAMPLE_1){
+	open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' '.$SAMPLE_2.' 2>>tmp/bwa_run.log|');
+}elsif($BAM){
+	open(FH,'samtools fastq '.$BAM.'|bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' - 2>>tmp/bwa_run.log|');
+}else{
+	exit 0;
+}
 	
 open(OFH_h,'>',$hq_file_pref);
 print OFH_h "Status\tTotal\tspike_in\tAbsent_Spikein\tOther_Muts\tReads\n";
@@ -335,6 +367,7 @@ while(<FH>){
 					}
 					# most M4 reads doesn't go to human reference comparison.
 					$doubt_sam{$line."\n"}=1 if ($muts_rep > $muts_thres);
+					$reliable_sam{$line."\n"}=1 if ($muts_rep <= $muts_thres);
 					
 				}elsif ($flag_clip <10){ #No two side (long) soft-clip
 					$spk_count{$remain_spikein}++;	
@@ -408,6 +441,9 @@ close OFH_fastq;
 
 ## Generate paired SAM FILE. ####
 foreach (keys %doubt_sam){
+	print OFH_SAM_SPK $_;
+}
+foreach (keys %reliable_sam){
 	print OFH_SAM_SPK $_;
 }
 close OFH_SAM_SPK;
@@ -547,7 +583,7 @@ if ($slow ne 'false'){
 		system('rm -f '.$slow_fq_file_2);	
 		system('rm -f '.$hq_header.'.unpair.fastq');
 		system('rm -f '.$hq_header.'.unpair.txt');
-		system('rm -f '.$sam_file);
+		#system('rm -f '.$sam_file);
 		system('rm -f '.$hq_file_pref);
 		# system('rm -f '.$hq_file.'.remained');
 		# system('rm -f '.$hq_file.'.filtered');
@@ -559,70 +595,124 @@ if ($slow ne 'false'){
 ##### generate fastq files for spike-in and origin reads #####
 if ($type eq 'all' || $type eq 'gzip'){
 	print "Warning: ".$spike_fastq_1." already exists; will overwrite! \n" if (-f $spike_fastq_1);
-	print "Warning: ".$spike_fastq_2." already exists; will overwrite! \n" if (-f $spike_fastq_2);
 	print "Warning: ".$origin_fastq_1." already exists; will overwrite! \n" if (-f $origin_fastq_1);
-	print "Warning: ".$origin_fastq_2." already exists; will overwrite! \n" if (-f $origin_fastq_2);
+	
+	my $spike_fastq_1_sam = $spike_fastq_1;
+	my $origin_fastq_1_sam = $origin_fastq_1;
 	
 	# separating fastq file 1
-	print ('Extracting Reads... (Pair - 1)'."\n");
-	open(FH,'gzip -cd '.$SAMPLE_1.'|');
-	open(OFH_spike,'>'.$spike_fastq_1);
-	open(OFH_origin,'>'.$origin_fastq_1);
+	if($SAMPLE_1){	
+		print ('Extracting Reads... (Pair - 1)'."\n");
+		open(FH,'gzip -cd '.$SAMPLE_1.'|');
+	}elsif($BAM){
+		print ('Extracting Reads... '."\n");
+		if ($keepBam){
+			open(FH,'samtools view '.$BAM.'|');
+			
+			$spike_fastq_1_sam =~ s/\.bam/\.sam/g;
+			$origin_fastq_1_sam =~ s/\.bam/\.sam/g;
+
+		}else{
+			open(FH,'samtools fastq '.$BAM.'|');
+		}
+	}
+	if ($keepBam){
+		open(OFH_spike,'>'.$spike_fastq_1_sam);
+		open(OFH_origin,'>'.$origin_fastq_1_sam);
+	}else{
+		open(OFH_spike,'>'.$spike_fastq_1);
+		open(OFH_origin,'>'.$origin_fastq_1);
+	}
+
 	my $signal = 0;
 	my $count_pair_1=0;
 	my $read_line_i = 0;
+	
+	if ($keepBam){
+		open(FH_header, 'samtools view -H '.$BAM.'|');
+		while(<FH_header>){
+			print OFH_spike $_;
+			print OFH_origin $_;
+		}
+		close FH_header;
+	}
+
 	while(<FH>){
 		my $line = $_;
-		if ($read_line_i % 4 ==0){ # only test on the head line
-			# Casava 1.8 format || Illumina reads ends with /1 or /2
-			if (/^@(\S+)\s(\S+)/ || /^@(\S+)\/[12]$/){
-				my $array=$1;
-				if (exists $spike_in_reads{$array}){
-					$count_pair_1++;
-					$signal = 1;
-				}else{
-					$signal = 0;
+		if($keepBam){
+			my @array = split("\t",$line);
+			if (exists $spike_in_reads{$array[0]}){
+				$count_pair_1++;
+				$signal = 1;
+			}else{				
+				$signal = 0;
+			}
+			print OFH_spike $line if ($signal ==1);
+			print OFH_origin $line if ($signal ==0);
+		}else{
+			if ($read_line_i % 4 ==0){ # only test on the head line
+				# Casava 1.8 format || Illumina reads ends with /1 or /2
+				if (/^@(\S+)\s(\S+)/ || /^@(\S+)\/[12]$/){
+					my $array=$1;
+					if (exists $spike_in_reads{$array}){
+						$count_pair_1++;
+						$signal = 1;
+					}else{
+						$signal = 0;
+					}
 				}
 			}
+			$read_line_i = $read_line_i + 1 ;
+			print OFH_spike $line if ($signal ==1);
+			print OFH_origin $line if ($signal ==0);
 		}
-		$read_line_i = $read_line_i + 1 ;
-		print OFH_spike $line if ($signal ==1);
-		print OFH_origin $line if ($signal ==0);
 	}
 	close FH;
 	close OFH_spike;
 	close OFH_origin;
-	
-	# separating fastq file 2
-	print ('Extracting Reads... (Pair - 2)'."\n");
-	open(FH,'gzip -cd '.$SAMPLE_2.'|');
-	open(OFH_spike,'>'.$spike_fastq_2);
-	open(OFH_origin,'>'.$origin_fastq_2);
-	$signal = 0;
-	# my $count_pair_2=0;
-	$read_line_i = 0;
-	while(<FH>){
-		my $line = $_;
-		if ($read_line_i % 4 ==0){ # head line
-			# Casava 1.8 format || Illumina reads ends with /1 or /2
-			if (/^@(\S+)\s(\S+)/ || /^@(\S+)\/[12]$/){
-				my $array=$1;
-				if (exists $spike_in_reads{$array}){
-					# $count_pair_2++;
-					$signal = 1;
-				}else{
-					$signal = 0;
+	# If paired-end reads;
+	if($SAMPLE_2){
+		print "Warning: ".$spike_fastq_2." already exists; will overwrite! \n" if (-f $spike_fastq_2);
+		print "Warning: ".$origin_fastq_2." already exists; will overwrite! \n" if (-f $origin_fastq_2);
+		
+		# separating fastq file 2
+		print ('Extracting Reads... (Pair - 2)'."\n");
+		open(FH,'gzip -cd '.$SAMPLE_2.'|');
+		open(OFH_spike,'>'.$spike_fastq_2);
+		open(OFH_origin,'>'.$origin_fastq_2);
+		$signal = 0;
+		# my $count_pair_2=0;
+		$read_line_i = 0;
+		while(<FH>){
+			my $line = $_;
+			if ($read_line_i % 4 ==0){ # head line
+				# Casava 1.8 format || Illumina reads ends with /1 or /2
+				if (/^@(\S+)\s(\S+)/ || /^@(\S+)\/[12]$/){
+					my $array=$1;
+					if (exists $spike_in_reads{$array}){
+						# $count_pair_2++;
+						$signal = 1;
+					}else{
+						$signal = 0;
+					}
 				}
 			}
+			$read_line_i = $read_line_i + 1 ;
+			print OFH_spike $line if ($signal ==1);
+			print OFH_origin $line if ($signal ==0);
 		}
-		$read_line_i = $read_line_i + 1 ;
-		print OFH_spike $line if ($signal ==1);
-		print OFH_origin $line if ($signal ==0);
+		close FH;
+		close OFH_spike;
+		close OFH_origin;
 	}
-	close FH;
-	close OFH_spike;
-	close OFH_origin;
-	
+	if($keepBam){
+		# Convert sam to bam file.
+		system('samtools view -b '.$spike_fastq_1_sam.' >'.$spike_fastq_1);
+		system('samtools view -b '.$origin_fastq_1_sam.' >'.$origin_fastq_1);
+		# Remove original sam file.
+		system('rm -f '.$spike_fastq_1_sam);
+		system('rm -f '.$origin_fastq_1_sam);
+	}
 	# End of the processing.
 	print ('Done! In total '.$count_pair_1." (pairs of) Spike-in reads have been separated.\n");
 }
@@ -630,10 +720,12 @@ if ($type eq 'all' || $type eq 'gzip'){
 ######   Generating Gzip files ######
 if ($type eq 'gzip'){
 	print ('Gzip output files.. (may take long time...)'."\n");
-	system('gzip -1 '.$origin_fastq_1);
-	system('gzip -1 '.$origin_fastq_2);
+	system('gzip -1 '.$origin_fastq_1);	
 	system('gzip '.$spike_fastq_1);
-	system('gzip '.$spike_fastq_2);
+	if($SAMPLE_2){
+		system('gzip -1 '.$origin_fastq_2);
+		system('gzip '.$spike_fastq_2);
+	}
 	print ('Program finished normally.'."\n");
 }
 
