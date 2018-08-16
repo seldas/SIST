@@ -3,6 +3,7 @@
 # Version 1.01
 # 
 # #### Updates: ####
+# 08/02/2018: provide an option to use customized spike-in reference. 
 # 06/09/2018: Support BAM output (to include additional read information)
 # 01/04/2018: Support BAM input (Ver. 1.01 -> 1.10)
 # 12/02/2017: Fix a Bug about read head detection in FASTQ file generation step. (ver. 1.00 -> 1.01)
@@ -34,15 +35,16 @@ my $USAGE =<<USAGE;
 	    match: only extract the spike-in reads 
 	    all:   generate fastq file for spike-in reads and remain origin reads (default)
 	    gzip:  generate gz file instead of fastq file
-	  -keepBam : when the input is bam file and keepBam is specified, output would keep the sam format and not change to fastq. 
+	  -keepBam : when the input is bam file and keepBam is specified, output would keep the sam format and not change to fastq; 
 	  -filter [true, false]: using human reference genome to improve the result quality (default: true);
+	  -ref [prefix]: prefix of spike-in reference, (defalt: "Refs/Accugenomics_Spikein");
 	  
 	Other options:
-	  -t [num]: threads used in BWA mem (default: 8)
-	  -bwa_b [num]: mismatch penalty used in BWA mem (default: 6)
-	  -bwa_o [num,num]: indel penalty used in BWA mem (default: [20,20])
-	  -min_length [num]: minimum match length for a read (default: 70)
-	  -clean [true, false]: remove intermediate files (default: true)
+	  -t [num]: threads used in BWA mem (default: 8);
+	  -bwa_b [num]: mismatch penalty used in BWA mem (default: 6);
+	  -bwa_o [num,num]: indel penalty used in BWA mem (default: [20,20]);
+	  -min_length [num]: minimum match length for a read (default: 70);
+	  -clean [true, false]: remove intermediate files (default: true);
 	  
 	-help:  Prints out this helpful message
 	
@@ -64,8 +66,13 @@ my $map_score = 70; # at least mapped 100 bps in consecutive to the spike-in Ref
 my $clean = 'true';
 my $slow = 'true';
 my $single_mode = 'false';
-
+my $samtools_path = 'samtools';
 my $test_mode = 'false';
+my $ref_prefix = 'Refs/Accugenomics_Spikein';
+
+#### TESTING MODE ONLY #####
+# my $samtools_path = '/storage2/lwu/SEQC2/samtools-1.8/build/bin/samtools'; # specific samtools path for test use.
+############################
 
 GetOptions (   
              "fastq_1=s"    => \$SAMPLE_1,
@@ -75,9 +82,9 @@ GetOptions (
 			 "f1=s"    		=> \$SAMPLE_1,
 			 "1=s"    		=> \$SAMPLE_1,
 			 
-			 "fastq2=s"  	=> \$SAMPLE_2,		 
-			 "fastq_2=s"  	=> \$SAMPLE_2,		 
-			 "fq_2=s"  		=> \$SAMPLE_2,			 
+			 "fastq2=s"  	=> \$SAMPLE_2,
+			 "fastq_2=s"  	=> \$SAMPLE_2,
+			 "fq_2=s"  		=> \$SAMPLE_2,
 			 "fq2=s"  		=> \$SAMPLE_2,
 			 "f2=s"  		=> \$SAMPLE_2,
 			 "2=s"  		=> \$SAMPLE_2,
@@ -86,6 +93,11 @@ GetOptions (
 			 
 			 "O=s"			=> \$hq_header,
 			 "o=s"			=> \$hq_header,
+			 
+			 "ref=s"		=> \$ref_prefix,
+			 "r=s"			=> \$ref_prefix,
+			 "R=s"			=> \$ref_prefix,
+			 "Ref=s"		=> \$ref_prefix,
 			 
 			 "type=s"		=> \$type, 
 			 "t=s"			=> \$threads,
@@ -108,6 +120,7 @@ GetOptions (
 
 ## Pre-Check Begin ##
 if ($help || (!$SAMPLE_1 && !$BAM)) {
+	# print "\tSomething Wrong\n";
     print "$USAGE\n";
     exit 0;
 }
@@ -217,10 +230,11 @@ print "Warning: ".$hq_file." already exists; will overwrite! \n" if (-f $hq_file
 my $REF_homo = 'Refs/genome.fa';
 
 # Accugenomics spike-in Reference
-my $REF='Refs/Accugenomics_Spikein.fasta';
-
-# Accugenomics spike-in mutations (vcf file)
+my $REF=$ref_prefix.'.fasta';
 my $mut_REF='Refs/muts_filtered_sp.vcf';
+if ($ref_prefix ne 'Refs/Accugenomics_Spikein'){
+	$mut_REF=prepare_ref($ref_prefix);
+}
 
 my %muts=();
 open(FH,$mut_REF);
@@ -266,7 +280,7 @@ if ($SAMPLE_1){
 		open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' 2>tmp/bwa_run.log|');
 	}
 }elsif($BAM){
-	open(FH,'samtools fastq '.$BAM.'|bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' - 2>>tmp/bwa_run.log|');
+	open(FH,$samtools_path.' fastq '.$BAM.'|bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' - 2>>tmp/bwa_run.log|');
 }else{
 	exit 0;
 }
@@ -356,7 +370,7 @@ while(<FH>){
 
 			
 			####### find spike-in counts		
-			# if ($flag_indel ==0 && $muts_included >0 ){ #No indels
+			#if ($flag_indel ==0 && $muts_included >0 ){ #No indels
 			if ($muts_included >0 ){ #allow indels
 				# Initialize parameters
 				my $remain_spikein = 0;
@@ -586,18 +600,18 @@ if ($type eq 'all' || $type eq 'gzip'){
 	
 	# separating fastq file 1
 	if($SAMPLE_1){	
-		print ('Extracting Reads... (Pair - 1)'."\n");
+		print ('Extracting Reads ... (Pair - 1)'."\n");
 		open(FH,'gzip -cd '.$SAMPLE_1.'|');
 	}elsif($BAM){
-		print ('Extracting Reads... '."\n");
+		print ('Extracting Reads from BAM ... '."\n");
 		if ($keepBam){
-			open(FH,'samtools view '.$BAM.'|');
+			open(FH,$samtools_path.' view '.$BAM.'|');
 			
 			$spike_fastq_1_sam =~ s/\.bam/\.sam/g;
 			$origin_fastq_1_sam =~ s/\.bam/\.sam/g;
 
 		}else{
-			open(FH,'samtools fastq '.$BAM.'|');
+			open(FH,$samtools_path.' fastq '.$BAM.'|');
 		}
 	}
 	if ($keepBam){
@@ -613,7 +627,7 @@ if ($type eq 'all' || $type eq 'gzip'){
 	my $read_line_i = 0;
 	
 	if ($keepBam){
-		open(FH_header, 'samtools view -H '.$BAM.'|');
+		open(FH_header, $samtools_path.' view -H '.$BAM.'|');
 		while(<FH_header>){
 			print OFH_spike $_;
 			print OFH_origin $_;
@@ -700,8 +714,8 @@ if ($type eq 'all' || $type eq 'gzip'){
 	}
 	if($keepBam){
 		# Convert sam to bam file.
-		system('samtools view -b '.$spike_fastq_1_sam.' >'.$spike_fastq_1);
-		system('samtools view -b '.$origin_fastq_1_sam.' >'.$origin_fastq_1);
+		system($samtools_path.' view -b '.$spike_fastq_1_sam.' >'.$spike_fastq_1);
+		system($samtools_path.' view -b '.$origin_fastq_1_sam.' >'.$origin_fastq_1);
 		# Remove original sam file.
 		system('rm -f '.$spike_fastq_1_sam);
 		system('rm -f '.$origin_fastq_1_sam);
@@ -774,4 +788,62 @@ sub get_test_data {
 		$hq_header =~ s/.*\///g;
 	}
 	return ($SAMPLE_1, $SAMPLE_2, $BAM, $hq_header);
+}
+
+sub prepare_ref {
+	my ($ref_prefix) = @_;
+	print ("customized spike-in reference are used. (".$ref_prefix.") Check required files ... \n");
+	# Create BWA INDEX if not existed.
+	if (! -f $ref_prefix.'.fasta.bwt'){
+		print ("BWA index files are not detected, try generating them automatically... \n");
+		system('bwa index '.$ref_prefix.'.fasta '); 
+		if (-f $ref_prefix.'.fasta.bwt'){
+			print ("Successfully generate BWA index. \n");
+		}else{
+			print ("Failed, please check BWA availability ... \n");
+			exit 0;
+		}
+	}else{
+		print ("BWA INDEX found!\n");
+	}
+	# Create the $mut_ref file of new spike-in reference if not existed.
+	$mut_REF=$ref_prefix.'.vcf';
+	if (! -f $mut_REF){
+		print ("No Mutation position file detected, try generating them automatically... \n");
+		open(FH,$ref_prefix.'.fasta');
+		open(OFH,'>', $mut_REF);
+		# Initialize
+		my $curr_gene_name = '';
+		my $i = 0;
+		
+		while( <FH> ){
+			if (/^>(\S+)/){
+				# reset position to 0 when a new gene/chrom started.
+				$curr_gene_name = $1;
+				$i = 0;
+			}else {
+				my $string = $_;
+				chomp($string);
+				foreach (split //, $string){
+					$i = $i + 1;
+					if ($_ =~ /[ACGT]/){
+						print OFH $curr_gene_name."\t".$i."\n";
+					}
+				}
+			}
+		}
+		
+		close FH;
+		close OFH;
+		
+		if (-f $mut_REF){
+			print("Success.\n");
+		}else{
+			print("Failed... please contact the developer.\n");
+			exit 0;
+		}
+	}else{
+		print ("Mutation position file found!\n");
+	}
+	return ($mut_REF);
 }
