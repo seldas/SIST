@@ -1,6 +1,8 @@
 # SIST: Separate Accugenomics Spike-In reads
 ## Version 1.30
 
+08/16/2018: optimized for UMI reads separation; 
+
 ## Introduction
 
 Spike-In Separation Toolbox (SIST) is developed for separate Accugenomics sequencing spike-in controls (reads） from original sample reads. The separation is majorly based on the unique characteristics of spike-in controls, which contains several di-nucleotides inside the target region.  
