@@ -3,6 +3,7 @@
 # Version 1.01
 # 
 # #### Updates: ####
+# 06/09/2018: Support BAM output (to include additional read information)
 # 01/04/2018: Support BAM input (Ver. 1.01 -> 1.10)
 # 12/02/2017: Fix a Bug about read head detection in FASTQ file generation step. (ver. 1.00 -> 1.01)
 # #### End of Updates ###
@@ -18,47 +19,74 @@ use strict;
 # USAGE
 my $USAGE =<<USAGE;
 	Usage:
-	  SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz> -bam <bam> -O <output_prefix> ] [options] [-help] [-eval]
+	  SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz>] [-bam <bam>] -O <output_prefix> [options]
 	
-	where:
-	-fastq_1  paired-end reads 1 (required if no bam input)
-	-fastq_2  paired-end reads 2 (required if no bam input)
-	-bam  input file as bam format (required if no fastq input)
-	-O	Output header (required)
+	Required inputs:
+	  -fastq_1  paired-end reads 1 (required if no bam input)
+	  -fastq_2  paired-end reads 2 (required if paired-end reads)
 	
-	options:
+	  -bam  input file as bam format (required if no fastq input)
+	
+	  -O	Output file header 
+	
+	Common options:
 	  -type [match, all, gzip] 
 	    match: only extract the spike-in reads 
 	    all:   generate fastq file for spike-in reads and remain origin reads (default)
 	    gzip:  generate gz file instead of fastq file
+	  -keepBam : when the input is bam file and keepBam is specified, output would keep the sam format and not change to fastq. 
+	  -filter [true, false]: using human reference genome to improve the result quality (default: true);
+	  
+	Other options:
 	  -t [num]: threads used in BWA mem (default: 8)
 	  -bwa_b [num]: mismatch penalty used in BWA mem (default: 6)
 	  -bwa_o [num,num]: indel penalty used in BWA mem (default: [20,20])
 	  -min_length [num]: minimum match length for a read (default: 70)
 	  -clean [true, false]: remove intermediate files (default: true)
-	  -filter [true, false]: using human reference genome to improve the result quality (default: true);
 	  
 	-help:  Prints out this helpful message
-	-eval:  Evaluation mode (for research use only, need picard)
 	
 USAGE
 #
 ######################################################
+
+my $SAMPLE_1 = '';
+my $SAMPLE_2 = '';
+my $BAM = '';
+my $hq_header = '';
 
 my $threads = 4;
 my $type = 'all';
 my $BWA_B=6; # penalty for mismatch. default = 4 in BWA MEM for short reads
 my $BWA_O='20,20';	# penalty for indels. default = 6, high value because indels are highly not expected in spike-in sequence.
 my $map_score = 70; # at least mapped 100 bps in consecutive to the spike-in Reference. 
-#my $cov = 0; # used for filtering spike-in reads. 
+#my $cov = 0; # was used for filtering spike-in reads. 
 my $clean = 'true';
 my $slow = 'true';
+my $single_mode = 'false';
+
+my $test_mode = 'false';
 
 GetOptions (   
-             "fastq_1=s"    => \my $SAMPLE_1,
-			 "fastq_2=s"  	=> \my $SAMPLE_2,
-			 "bam=s"  	    => \my $BAM,
-			 "O=s"			=> \my $hq_header,
+             "fastq_1=s"    => \$SAMPLE_1,
+             "fastq1=s"     => \$SAMPLE_1,
+			 "fq_1=s"    	=> \$SAMPLE_1,
+			 "fq1=s"    	=> \$SAMPLE_1,
+			 "f1=s"    		=> \$SAMPLE_1,
+			 "1=s"    		=> \$SAMPLE_1,
+			 
+			 "fastq2=s"  	=> \$SAMPLE_2,		 
+			 "fastq_2=s"  	=> \$SAMPLE_2,		 
+			 "fq_2=s"  		=> \$SAMPLE_2,			 
+			 "fq2=s"  		=> \$SAMPLE_2,
+			 "f2=s"  		=> \$SAMPLE_2,
+			 "2=s"  		=> \$SAMPLE_2,
+			 
+			 "bam=s"  	    => \$BAM,
+			 
+			 "O=s"			=> \$hq_header,
+			 "o=s"			=> \$hq_header,
+			 
 			 "type=s"		=> \$type, 
 			 "t=s"			=> \$threads,
 			 "bwa_b=s"		=> \$BWA_B,
@@ -68,50 +96,26 @@ GetOptions (
 			 "clean=s"		=> \$clean,
 			 "filter=s"		=> \$slow,
 			 q(help)		=> \my $help,
-			 q(test_pos)		=> \my $test_pos, # used for development
-			 q(test_neg)		=> \my $test_neg, # used for development
-			 q(test_bam)		=> \my $test_bam, # used for development
+			 q(h)			=> \my $help,
 			 q(eval)		=> \my $eval,
-			 q(keepBam)		=> \my $keepBam # Don't convert output file from bam to fastq; designed for ThermoFisher Data
+			 q(keepBam)		=> \my $keepBam,
+			 # ONLY USED FOR DEV PURPOSES;
+			 "test_mode=s"	=> \$test_mode
 			 );            
 
-if ($help) {
+## TEST_MODE			 		 
+($SAMPLE_1, $SAMPLE_2, $BAM, $hq_header) = get_test_data($test_mode) if ($test_mode ne 'false');
+
+## Pre-Check Begin ##
+if ($help || (!$SAMPLE_1 && !$BAM)) {
     print "$USAGE\n";
     exit 0;
 }
 
-# dataset for test use
-if ($test_pos) {
-	# test Spike-in Sample
-	$SAMPLE_1='data/test_pos_2_1.fastq.gz';
-	$SAMPLE_2='data/test_pos_2_2.fastq.gz';
-	
-	$hq_header = $SAMPLE_1; 
-	$hq_header =~ s/_1\.fastq\.gz//g;
-	$hq_header =~ s/.*\///g;
-	#$hq_header = $hq_header;
+if ( (!$SAMPLE_2)&& !$BAM){
+	$single_mode = 'true'; # single-end reads are used in this study
+	print "Detect current analysis uses single-ended reads; if not, please stop and double check whether fastq_2 is correct. \n";
 }
-if ($test_neg) {		
-	# test 'Negative' Sample
-	$SAMPLE_1='data/test_neg_2_1.fastq.gz'; 
-	$SAMPLE_2='data/test_neg_2_2.fastq.gz';
-
-	$hq_header = $SAMPLE_1; 
-	$hq_header =~ s/_1\.fastq\.gz//g;
-	$hq_header =~ s/.*\///g;
-	#$hq_header = $hq_header;
-}
-if ($test_bam) {		
-	# test 'Positive' Sample in BAM format
-	$BAM='data/test_pos.bam'; 
-
-	$hq_header = $BAM;
-	$hq_header =~ s/\.bam/_bam/g;	
-	$hq_header =~ s/.*\///g;
-	#$hq_header = $hq_header; 
-}
-
-## Check BEGIN ###.
 
 # Check analysis type (-type)
 if ($type ne 'match' && $type ne 'all' && $type ne 'gzip' ){
@@ -142,8 +146,15 @@ if (! -f 'Refs/genome.fa.bwt' && $slow ne 'false'){
 }
 
 # Check Input Files	
-if ( (!$BAM ||! -f $BAM) && (! $SAMPLE_1 ||! $SAMPLE_2 ||! -f $SAMPLE_1 ||! -f $SAMPLE_2)){	
+if ( (!$BAM||! -f $BAM) && (!$SAMPLE_1||! -f $SAMPLE_1 )){	
+	print $BAM ;
 	print " Missing input files!\n";
+	print " Use -help to get more information.\n";
+	exit 0;
+}
+
+if ( (!$BAM||! -f $BAM) && ($single_mode eq 'false') && (!$SAMPLE_2||! -f $SAMPLE_2 )){	
+	print " Missing paired input files!\n";
 	print " Use -help to get more information.\n";
 	exit 0;
 }
@@ -160,6 +171,9 @@ if ($SAMPLE_1){
 		print "Not supported Fastq file format for Fastq_1! Must ended with .fastq[.gz] or .fq[.gz] \n";
 		exit 0;
 	}
+}
+
+if ($SAMPLE_2){
 	if ($SAMPLE_2 !~ /\.fa*s*t*q$/ && $SAMPLE_2 !~ /\.fa*s*t*q\.gz$/){
 		print "Not supported Fastq file format for Fastq_2! Must ended with .fastq[.gz] or .fq[.gz] \n";
 		exit 0;
@@ -167,14 +181,20 @@ if ($SAMPLE_1){
 }
 
 # Check Output Header
-if ( ! $hq_header){	
+if (!$hq_header){	
 	print " Missing output folder!\n";
 	print " Use -help to get more information.\n";
 	exit 0;
 }
-###########CHECK END##########
+
+# Create tmp folder if not existed.
+my $tmp_dir = 'tmp';
+mkdir($tmp_dir) unless(-d $tmp_dir);
+
+## Pre-Check End ##
 
 
+## Variable Preparation Begin ##
 # Create output files
 my $hq_file_pref = $hq_header.".prefil";
 my $hq_file = $hq_header.".txt";
@@ -193,7 +213,6 @@ my $origin_fastq_2 = $hq_header."_origin_2.fastq" if($SAMPLE_2);
 # if output file already exists; overwrite it.
 print "Warning: ".$hq_file." already exists; will overwrite! \n" if (-f $hq_file);
 
-#################Default Parameter Settings##########
 # Human reference genome:
 my $REF_homo = 'Refs/genome.fa';
 
@@ -211,7 +230,11 @@ while(<FH>){
 	$muts{$array[0].":".$array[1]}=1;
 }
 close FH;
-######################################################
+
+## Variable Preparation End ##
+
+
+## Main Program Begin ##
 
 open(OFH_SAM_SPK,'>'.$sam_file);
 
@@ -237,7 +260,11 @@ $spk_count{'1'}=0;
 	
 # Find all mapped reads (candidate spike-in reads) from original read set.
 if ($SAMPLE_1){
-	open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' '.$SAMPLE_2.' 2>>tmp/bwa_run.log|');
+	if ($single_mode eq 'false'){
+		open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' '.$SAMPLE_2.' 2>tmp/bwa_run.log|');
+	}else{
+		open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' 2>tmp/bwa_run.log|');
+	}
 }elsif($BAM){
 	open(FH,'samtools fastq '.$BAM.'|bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' - 2>>tmp/bwa_run.log|');
 }else{
@@ -258,7 +285,7 @@ while(<FH>){
 		chomp($line);
 		my @array=split("\t",$line);
 		$reads_count_total{$array[0]}=1;
-		if ($array[2] ne '*' && $line =~ /\tMD:Z:[\dACGT]+\t/){	# sequence has to be mapped
+		if ($array[2] ne '*' && $line =~ /\tMD:Z:[\d\^ACGT]+\t/){	# sequence has to be mapped
 			
 		##### Pre-Step : reads preparation #####
 			$reads_count_bwa{$array[0]}=1;
@@ -266,18 +293,21 @@ while(<FH>){
 			my $sum_length = length($array[9]);
 			
 			##             INDEL detection  																###
-			# In current version, indel are not allowed to happen. They might be in Doubt reads.          
+			## In current version, indel are not allowed to happen. They might be in Doubt reads.      (changed. allow indels)
 			my $ins_count = 0;
 			my $ins_prev = 0;
 			if ($cigar =~ /(\d+)M(\d+)I/){
-				$ins_prev = $1;
-				$ins_count = $2; 
+				$ins_count = $ins_count+$& while($cigar =~ /(\d+)I/g );
+				# $ins_prev = $1;
+				# $ins_count = $2; 
 			}
+			
 			my $del_count = 0;
 			my $del_prev = 0;
 			if ($cigar =~ /(\d+)M(\d+)D/){
-				$del_prev = $1; 
-				$del_count = $2; 
+				$del_count = $del_count+$& while($cigar =~ /(\d+)D/g );
+				# $del_prev = $1; 
+				# $del_count = $2; 
 			}
 							
 			my $flag_indel = 0;
@@ -307,7 +337,7 @@ while(<FH>){
 			
 			
 			## 			  FLAG match length: 																###
-			my $mapped_seq = $sum_length-$left_clip-$right_clip;
+			my $mapped_seq = $sum_length-$left_clip-$right_clip-$ins_count+$del_count;
 			
 			my $flag_length = 0;	
 			$flag_length = ($mapped_seq-$map_score)/10;
@@ -326,15 +356,15 @@ while(<FH>){
 
 			
 			####### find spike-in counts		
-			if ($flag_indel ==0 && $muts_included >0 ){ #No indels
-				
+			# if ($flag_indel ==0 && $muts_included >0 ){ #No indels
+			if ($muts_included >0 ){ #allow indels
 				# Initialize parameters
 				my $remain_spikein = 0;
 				my $count_ref=0;
 				my $muts_rep=$ins_count; #
 				
-				my $md_str = $1 if $line =~ (/\tMD:Z:([\dACGT]+)\t/);
-				my @md_array = split(/[ACGT]/,$md_str);
+				my $md_str = $1 if $line =~ (/\tMD:Z:([\^\dACGT]+)\t/);
+				my @md_array = split(/[\^ACGT]+/,$md_str);
 				my $pos_start = $array[3];
 				pop(@md_array);
 				foreach(@md_array){
@@ -352,7 +382,8 @@ while(<FH>){
 		
 		##### More than 4 Spike-in mutation detected: M>=4 #####
 				my $muts_thres = int($mapped_seq/50)+1;	
-				if ($remain_spikein>=4 && $muts_rep <$remain_spikein){
+				# if ($remain_spikein>=4 && $remain_spikein > $muts_rep){ # remove this criteria
+				if ($remain_spikein>=4 ){
 					$spk_count{'>=4'} ++ ;
 					if ($muts_rep < $muts_thres || $flag_clip < 5 || $flag_length>0){
 						if (exists $high_reads{$array[0]}){								
@@ -372,9 +403,9 @@ while(<FH>){
 				}elsif ($flag_clip <10){ #No two side (long) soft-clip
 					$spk_count{$remain_spikein}++;	
 					#### 3 Spike-in Mutation detected: M=3 ####
-					if ($remain_spikein ==3){
+					if ($remain_spikein == 3){
 						# C1: Perfect match 
-						if ($count_ref <=1 && $muts_rep+$count_ref < $muts_thres && $flag_length>0){ # (worst case) e.g., 4-3-1-1; 3-3-0-2;
+						if ($count_ref <=1 && $muts_rep+$count_ref <= $muts_thres && $flag_length>0){ # (worst case) e.g., 4-3-1-1; 3-3-0-2;
 							if (exists $high_reads{$array[0]}){								
 								print OFH_h $high_reads{$array[0]};
 								print OFH_h "M3\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
@@ -402,8 +433,7 @@ while(<FH>){
 							}else{
 								$high_reads{$array[0]}="M2\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
 								$reads_count_spk{$array[0]}=1;
-							}
-							
+							}						
 							$doubt_sam{$line."\n"}=1;
 						}
 					}
@@ -496,63 +526,18 @@ if ($slow ne 'false'){
 							
 							
 						if ($match_spk < $match_ref -10 || $md_spk =~ /[ATCG]0[ATCG]/ || $mut_spk > $mut_ref || ($mut_ref ==0 && $cigar_ref =~ /^\d+M$/) ){
-							# print OFH "Suspect_reads\t".$line."\n";
-							# print OFH "Spike in Map\t".$doubt_sam{$array[0]}."\n";
-							$suspect_reads{$array[0]}=1;
+							if (!exists $suspect_reads{$array[0]}){
+								$suspect_reads{$array[0]}=1;
+							}
 						}
+					}else{
+						$suspect_reads{$array[0]}=-1; # remove from the suspect_reads if it mapped to human reference containing di-nucleotide mutations.
 					}
 				}
 			}
 		}
 		close FH;
 	}
-	open(FH,'bwa mem -v 0 -SP -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF_homo.' '.$hq_header.'.unpair.fastq 2>>tmp/bwa_run_3.log|');
-	while(<FH>){
-		if ($_ !~ /^@/){
-			my $line=$_;
-			chomp($line);
-			my @array=split("\t");
-			if ($line =~ /MD:Z:([\dATCG]+)\t/){
-				my $sum_length_ref = length($array[9]); 
-				my $md_string = $1;
-				my $mut_ref = scalar(split(/[ACGT]/,$md_string));
-				
-				if ($md_string !~ /[ATCG]0[ATCG]/){
-				
-					my $cigar_ref = $array[5];
-					my $left_clip=0;
-					my $right_clip=0;
-					$left_clip = $1 if ($cigar_ref =~ /(\d+)S\d+M/); # 
-					$right_clip = $1 if ($cigar_ref =~ /\d+M(\d+)S/); # 
-					my $match_ref = $sum_length_ref-$left_clip-$right_clip;
-					
-					
-					my @array_spk = split("\t",$doubt_sam{$array[0]});
-					my $sum_length_spk = length($array_spk[9]); 
-					
-					my $cigar_spk = $array_spk[5];
-					my $left_clip=0;
-					my $right_clip=0;
-					$left_clip = $1 if ($cigar_spk =~ /(\d+)S\d+M/); # 
-					$right_clip = $1 if ($cigar_spk =~ /\d+M(\d+)S/); # 
-					my $match_spk = $sum_length_spk-$left_clip-$right_clip;
-							
-					my $md_spk = $1 if ($doubt_sam{$array[0]} =~ /MD:Z:([\dATCG]+)\t/);
-					my $mut_spk = scalar(split(/[ACGT]/,$md_spk));
-						
-						
-					if ($match_spk < $match_ref -10 || $md_spk =~ /[ATCG]0[ATCG]/ || $mut_spk > $mut_ref || ( $mut_ref ==0 && $md_string =~ /^\d+M$/ )){
-						# print OFH "Suspect_reads\t".$line."\n";
-						# print OFH "Spike in Map\t".$doubt_sam{$array[0]}."\n";
-						$suspect_reads{$array[0]}=1;
-					}
-				}
-			}
-		}
-	}	
-	close FH;
-	# close OFH;
-	
 	
 	open(OFH,'>'.$hq_file);
 	print OFH "Total Statistics:\n";
@@ -571,6 +556,9 @@ if ($slow ne 'false'){
 		if (!exists $suspect_reads{$array[5]}){
 			print OFH $line;
 			$spike_in_reads{$array[5]}=1;
+		}elsif($suspect_reads{$array[5]} == -1){
+			print OFH $line;
+			$spike_in_reads{$array[5]}=1;
 		}
 	}
 	close FH;	
@@ -583,11 +571,7 @@ if ($slow ne 'false'){
 		system('rm -f '.$slow_fq_file_2);	
 		system('rm -f '.$hq_header.'.unpair.fastq');
 		system('rm -f '.$hq_header.'.unpair.txt');
-		#system('rm -f '.$sam_file);
 		system('rm -f '.$hq_file_pref);
-		# system('rm -f '.$hq_file.'.remained');
-		# system('rm -f '.$hq_file.'.filtered');
-		# system('rm -f '.$slow_output);
 	}
 }
 
@@ -660,6 +644,15 @@ if ($type eq 'all' || $type eq 'gzip'){
 					}else{
 						$signal = 0;
 					}
+				}elsif(/^@(.+)/){
+					my $array=$1;
+					chomp($array);
+					if (exists $spike_in_reads{$array}){
+						$count_pair_1++;
+						$signal = 1;
+					}else{
+						$signal = 0;
+					}
 				}
 			}
 			$read_line_i = $read_line_i + 1 ;
@@ -671,14 +664,14 @@ if ($type eq 'all' || $type eq 'gzip'){
 	close OFH_spike;
 	close OFH_origin;
 	# If paired-end reads;
-	if($SAMPLE_2){
+	if($SAMPLE_2 ne 'empty'){
 		print "Warning: ".$spike_fastq_2." already exists; will overwrite! \n" if (-f $spike_fastq_2);
 		print "Warning: ".$origin_fastq_2." already exists; will overwrite! \n" if (-f $origin_fastq_2);
 		
 		# separating fastq file 2
 		print ('Extracting Reads... (Pair - 2)'."\n");
 		open(FH,'gzip -cd '.$SAMPLE_2.'|');
-		open(OFH_spike,'>'.$spike_fastq_2);
+		open(OFH_spike,'>'.$spike_fastq_2)	;
 		open(OFH_origin,'>'.$origin_fastq_2);
 		$signal = 0;
 		# my $count_pair_2=0;
@@ -714,7 +707,7 @@ if ($type eq 'all' || $type eq 'gzip'){
 		system('rm -f '.$origin_fastq_1_sam);
 	}
 	# End of the processing.
-	print ('Done! In total '.$count_pair_1." (pairs of) Spike-in reads have been separated.\n");
+	print ('Done! In total '.$count_pair_1." Spike-in reads have been separated.\n");
 }
 
 ######   Generating Gzip files ######
@@ -737,8 +730,48 @@ if ($eval){
 
 ###### CLEAN UP ######
 if ($clean eq 'true'){
-	#system('rm -f tmp/bwa_run.log'); # remove BWA log file 
-	#system('rm -f tmp/bwa_run_2.log'); # remove BWA log file 
-	#system('rm -f tmp/bwa_run_3.log'); # remove BWA log file 
-	#system('rm -f tmp/samtofastq.log'); # remove BWA log file 
+	system('rm -f tmp/bwa_run.log'); # remove BWA log file 
+	system('rm -f tmp/bwa_run_2.log'); # remove BWA log file 
+	system('rm -f tmp/bwa_run_3.log'); # remove BWA log file 
+	system('rm -f tmp/samtofastq.log'); # remove BWA log file 
+}
+
+## Main Program End
+
+## Subroutines for Test mode	 			 
+sub get_test_data {
+	my ($test_mode) = @_;
+	my $SAMPLE_1 = '';
+	my $SAMPLE_2 = 'empty';
+	my $BAM = '';
+	my $hq_header = '';
+	print("In Test Mode\n");
+	
+	if ($test_mode eq 'test_pos') {
+		# test Spike-in Sample
+		$SAMPLE_1='data/test_pos_2_1.fastq.gz';
+		$SAMPLE_2='data/test_pos_2_2.fastq.gz';
+		
+		$hq_header = $SAMPLE_1; 
+		$hq_header =~ s/_1\.fastq\.gz//g;
+		$hq_header =~ s/.*\///g;
+	}
+	if ($test_mode eq 'test_neg') {		
+		# test 'Negative' Sample
+		$SAMPLE_1='data/test_neg_2_1.fastq.gz'; 
+		$SAMPLE_2='data/test_neg_2_2.fastq.gz';
+
+		$hq_header = $SAMPLE_1; 
+		$hq_header =~ s/_1\.fastq\.gz//g;
+		$hq_header =~ s/.*\///g;
+	}
+	if ($test_mode eq 'test_bam') {		
+		# test 'Positive' Sample in BAM format
+		$BAM='data/test_pos.bam'; 
+
+		$hq_header = $BAM;
+		$hq_header =~ s/\.bam/_bam/g;	
+		$hq_header =~ s/.*\///g;
+	}
+	return ($SAMPLE_1, $SAMPLE_2, $BAM, $hq_header);
 }
