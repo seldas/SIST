@@ -1,5 +1,5 @@
 # SIST: Separate Accugenomics Spike-In reads
-## Version 1.00
+## Version 1.30
 
 ## Introduction
 
@@ -13,28 +13,35 @@ use `perl SIST.pl -help` to get help information.
 #### **Note**
 During to privacy concern, currently the reference of Accugenomics Spike-in Control are not released. This tool **CANNOT** be ran successfully without the specific refernece genome. If you are project related person, please contact [Leihong](mailto:leihong.wu@fda.hhs.gov) for further assistance.  
 
-## Usage: 
- `SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz> -O <output_prefix> ] [options] [-help] [-eval]`
- 
-	where:
-	-fastq_1  paired-end reads 1 (required)
-	-fastq_2  paired-end reads 2 (required)
-	-O	Output header (required)
-	
-	options:
-	  -type [match, all, gzip] 
-	    match: only extract the spike-in reads 
-	    all:   generate fastq file for spike-in reads and remain origin reads (default)
-	    gzip:  generate gz file instead of fastq file
-	  -t [num]: threads used in BWA mem (default: 8)
-	  -bwa_b [num]: mismatch penalty used in BWA mem (default: 6)
-	  -bwa_o [num,num]: indel penalty used in BWA mem (default: [20,20])
-	  -min_length [num]: minimum match length for a read (default: 70)
-	  -clean [true, false]: remove intermediate files (default: true)
-	  -filter [true, false]: using human reference genome to improve the result quality (default: true);
-	  
-	-help:  Prints out this helpful message
-	-eval:  Evaluation mode (for research use)
+##Usage:
+    SIST.pl [-fastq_1 <fastq.gz> -fastq_2 <fastq.gz>] [-bam <bam>] -O <output_prefix> [options]
+    
+    Required inputs:
+      -fastq_1  paired-end reads 1 (required if no bam input)
+      -fastq_2  paired-end reads 2 (required if paired-end reads)
+    
+      -bam  input file as bam format (required if no fastq input)
+    
+      -O    Output file header 
+    
+    Common options:
+      -type [match, all, gzip] 
+        match: only extract the spike-in reads 
+        all:   generate fastq file for spike-in reads and remain origin reads (default)
+        gzip:  generate gz file instead of fastq file
+      -keepBam : when the input is bam file and keepBam is specified, output would keep the sam format and not change to fastq; 
+      -filter [true, false]: using human reference genome to improve the result quality (default: true);
+      -ref [prefix]: prefix of spike-in reference, (defalt: "Refs/Accugenomics_Spikein");
+      
+    Other options:
+      -t [num]: threads used in BWA mem (default: 8);
+      -bwa_b [num]: mismatch penalty used in BWA mem (default: 6);
+      -bwa_o [num,num]: indel penalty used in BWA mem (default: [20,20]);
+      -min_length [num]: minimum match length for a read (default: 70);
+      -umi [true, false]: flag for umi reads (default: false);
+      -clean [true, false]: remove intermediate files (default: true);
+      
+    -help:  Prints out this helpful message
 
 ## Example 
 
