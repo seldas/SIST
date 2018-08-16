@@ -45,6 +45,7 @@ my $USAGE =<<USAGE;
 	  -bwa_b [num]: mismatch penalty used in BWA mem (default: 6);
 	  -bwa_o [num,num]: indel penalty used in BWA mem (default: [20,20]);
 	  -min_length [num]: minimum match length for a read (default: 70);
+	  -umi [true, false]: flag for umi reads (default: false);
 	  -clean [true, false]: remove intermediate files (default: true);
 	  
 	-help:  Prints out this helpful message
