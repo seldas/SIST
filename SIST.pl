@@ -1,9 +1,10 @@
 ####################
 # SIST: Separate Accugenomics Spike-In reads
-# Version 1.01
+# Version 1.30
 # 
 # #### Updates: ####
-# 08/02/2018: provide an option to use customized spike-in reference. 
+# 08/16/2018: using git-hub for version control (update information depreciated)
+# 08/02/2018: provide an option to use customized spike-in reference. (Ver. 1.10 -> 1.20)
 # 06/09/2018: Support BAM output (to include additional read information)
 # 01/04/2018: Support BAM input (Ver. 1.01 -> 1.10)
 # 12/02/2017: Fix a Bug about read head detection in FASTQ file generation step. (ver. 1.00 -> 1.01)
