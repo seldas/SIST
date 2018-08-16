@@ -145,24 +145,28 @@ if ($type ne 'match' && $type ne 'all' && $type ne 'gzip' ){
 
 # c1.4 Check Human Reference Files, only checked when "slow" mode is on 
 if (! -f 'Refs/genome.fa' && $slow ne 'false'){
-	print('Missing human reference genome file. create a link of human reference genome (e.g., hg38) as Refs/genome.fa'."\n");
+	print('Missing human reference genome file. 
+		Create a link of human reference genome (e.g., hg38) as Refs/genome.fa'."\n");
 	exit 0;
 }
 
 if (! -f 'Refs/genome.dict' && $slow ne 'false' && $eval){
-	print('Missing human reference genome dictionary. create a link of human reference genome dictionary (by picard) as Refs/genome.dict'."\n");
+	print('Missing human reference genome dictionary. 
+		Create a link of human reference genome dictionary (by picard) as Refs/genome.dict'."\n");
 	exit 0;
 }
 
 if (! -f 'Refs/genome.fa.bwt' && $slow ne 'false'){
-	print('Missing human reference genome index. create a link of human reference genome dictionary (by BWA index) such as Refs/genome.fa.bwt, etc.'."\n");
+	print('Missing human reference genome index. 
+		Create a link of human reference genome dictionary (by BWA index) such as Refs/genome.fa.bwt, etc.'."\n");
 	exit 0;
 }
 
 # c1.5 Check Input Files Availability (-f1, -f2, -bam)
 if ( (!$SAMPLE_2)&& !$BAM){
 	$single_mode = 'true'; # single-end reads are used in this study
-	print "Detect current analysis uses single-ended reads; if not, please stop and double check whether fastq_2 is correct. \n";
+	print "Detect current analysis uses single-ended reads; 
+		if not, please stop and double check whether fastq_2 is correct. \n";
 }
 
 if ( (!$BAM||! -f $BAM) && (!$SAMPLE_1||! -f $SAMPLE_1 )){	
@@ -288,202 +292,205 @@ open(OFH_SAM_SPK,'>'.$sam_file);
 if ($SAMPLE_1){
 	if ($single_mode eq 'false'){
 		# paired-end reads
-		open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' '.$SAMPLE_2.' 2>tmp/bwa_run.log|');
+		open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.
+			$SAMPLE_1.' '.$SAMPLE_2.' 2>tmp/bwa_run.log|');
 	}else{
 		# single-end reads
-		open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.$SAMPLE_1.' 2>tmp/bwa_run.log|');
+		open(FH,'bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' '.
+			$SAMPLE_1.' 2>tmp/bwa_run.log|');
 	}
 }elsif($BAM){
 	# input is Bam
-	open(FH,$samtools_path.' fastq '.$BAM.'|bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.' - 2>>tmp/bwa_run.log|');
+	open(FH,$samtools_path.' fastq '.$BAM.'|bwa mem -v 0 -B '.$BWA_B.' -O '.$BWA_O.' -t '.$threads.' '.$REF.
+			' - 2>>tmp/bwa_run.log|');
 }else{
 	exit 0;
 }
 
 # read output from BWA alignment
 while(<FH>){
-	if (/^@/){
-		# print header information
-		print OFH_SAM_SPK $_;		
-	}else{
-		# determine read is spike-in or original.
-		my $read_stat = 0; 
-		my $stop_sign++;
+ if (/^@/){
+  # print header information
+  print OFH_SAM_SPK $_;		
+ }else{
+  # determine read is spike-in or original.
+  my $read_stat = 0; 
+  my $stop_sign++;
 					
-		my $line=$_;
-		chomp($line);
-		my @array=split("\t",$line);
-		$reads_count_total{$array[0]}=1;
+  my $line=$_;
+  chomp($line);
+  my @array=split("\t",$line);
+  $reads_count_total{$array[0]}=1;
 		
-		# sequence has to be mapped
-		if ($array[2] ne '*' && $line =~ /\tMD:Z:[\d\^ACGT]+\t/){			
-			# Pre-Step : reads preparation
-			$reads_count_bwa{$array[0]}=1;
-			my $cigar = $array[5];
-			my $sum_length = length($array[9]);
+  # sequence has to be mapped
+  if ($array[2] ne '*' && $line =~ /\tMD:Z:[\d\^ACGT]+\t/){			
+   # Pre-Step : reads preparation
+   $reads_count_bwa{$array[0]}=1;
+   my $cigar = $array[5];
+   my $sum_length = length($array[9]);
 			
-			# INDEL detection  																###
-			my $ins_count = 0;
-			my $ins_prev = 0;
-			if ($cigar =~ /(\d+)M(\d+)I/){
-				$ins_count = $ins_count+$& while($cigar =~ /(\d+)I/g );
-				# $ins_prev = $1;
-				# $ins_count = $2; 
-			}
+   # INDEL detection  																###
+   my $ins_count = 0;
+   my $ins_prev = 0;
+   if ($cigar =~ /(\d+)M(\d+)I/){
+    $ins_count = $ins_count+$& while($cigar =~ /(\d+)I/g );
+    # $ins_prev = $1;
+    # $ins_count = $2; 
+   }
 			
-			my $del_count = 0;
-			my $del_prev = 0;
-			if ($cigar =~ /(\d+)M(\d+)D/){
-				$del_count = $del_count+$& while($cigar =~ /(\d+)D/g );
-				# $del_prev = $1; 
-				# $del_count = $2; 
-			}
+   my $del_count = 0;
+   my $del_prev = 0;
+   if ($cigar =~ /(\d+)M(\d+)D/){
+    $del_count = $del_count+$& while($cigar =~ /(\d+)D/g );
+    # $del_prev = $1; 
+    # $del_count = $2; 
+   }
 							
-			my $flag_indel = 0;
-			$flag_indel = 1 if ($ins_count > 0 || $del_count>0);							
+   my $flag_indel = 0;
+   $flag_indel = 1 if ($ins_count > 0 || $del_count>0);							
 				
-			# FLAG for clipping : if two-sides softclips												####
-			my $left_clip=0;
-			my $left_clip_hard=0;
-			my $right_clip=0;
-			my $right_clip_hard=0;
-			$left_clip = $1 if ($cigar =~ /(\d+)S\d+M/); # 
-			$right_clip = $1 if ($cigar =~ /\d+M(\d+)S/); # 
-			$left_clip_hard = $1 if ($cigar =~ /(\d+)H\d+M/); # 
-			$right_clip_hard = $1 if ($cigar =~ /\d+M(\d+)H/); # 
+   # FLAG for clipping : if two-sides softclips												####
+   my $left_clip=0;
+   my $left_clip_hard=0;
+   my $right_clip=0;
+   my $right_clip_hard=0;
+   $left_clip = $1 if ($cigar =~ /(\d+)S\d+M/); # 
+   $right_clip = $1 if ($cigar =~ /\d+M(\d+)S/); # 
+   $left_clip_hard = $1 if ($cigar =~ /(\d+)H\d+M/); # 
+   $right_clip_hard = $1 if ($cigar =~ /\d+M(\d+)H/); # 
 			
-			my $flag_clip = 0;
-			if ($umi_tag eq 'true'){
-				#no clipping criterion for umi reads;
-				$flag_clip = 5;
-			}else{
-				#if not umi reads, soft-clipping criterion still works
-				$flag_clip = 1 if ($right_clip >0 || $left_clip >0); # single-side softclip reads 
-				$flag_clip = 2 if ($right_clip_hard >0 || $left_clip_hard >0); # single-side hardclip reads 			
-				$flag_clip = 5 if ($left_clip>0 && $right_clip>0); # two-side softclip (one short) reads 
-				$flag_clip = 6 if ($left_clip_hard>0 && $right_clip_hard>0); # two-side hardclip (one short) reads 
-				$flag_clip = 11 if ($left_clip >20 && $right_clip >20); # two-side long softclip reads 
-				$flag_clip = 12 if ($left_clip_hard >20 && $right_clip_hard >20); # two-side long hardclip reads
-			}
+   my $flag_clip = 0;
+   if ($umi_tag eq 'true'){
+    #no clipping criterion for umi reads;
+    $flag_clip = 5;
+   }else{
+    #if not umi reads, soft-clipping criterion still works
+    $flag_clip = 1 if ($right_clip >0 || $left_clip >0); # single-side softclip reads 
+    $flag_clip = 2 if ($right_clip_hard >0 || $left_clip_hard >0); # single-side hardclip reads 			
+    $flag_clip = 5 if ($left_clip>0 && $right_clip>0); # two-side softclip (one short) reads 
+    $flag_clip = 6 if ($left_clip_hard>0 && $right_clip_hard>0); # two-side hardclip (one short) reads 
+    $flag_clip = 11 if ($left_clip >20 && $right_clip >20); # two-side long softclip reads 
+    $flag_clip = 12 if ($left_clip_hard >20 && $right_clip_hard >20); # two-side long hardclip reads
+   }
 			
-			## FLAG for maximum match length: 																###
-			my $mapped_seq = $sum_length-$left_clip-$right_clip-$ins_count+$del_count;
-			my $flag_length = 0;	
-			$flag_length = ($mapped_seq-$map_score)/10;
+   ## FLAG for maximum match length: 																###
+   my $mapped_seq = $sum_length-$left_clip-$right_clip-$ins_count+$del_count;
+   my $flag_length = 0;	
+   $flag_length = ($mapped_seq-$map_score)/10;
+   			
+   ## counting Spike-in mutation site															###
+   my $muts_included=0;
+   foreach($array[3]..($array[3]+$mapped_seq-1)){
+    my $id_tmp = $array[2].':'.$_;
+    if (exists $muts{$id_tmp}){
+     $muts_included ++ ;
+    }
+   }
 						
-			## counting Spike-in mutation site															###
-			my $muts_included=0;
-			foreach($array[3]..($array[3]+$mapped_seq-1)){
-				my $id_tmp = $array[2].':'.$_;
-				if (exists $muts{$id_tmp}){
-					$muts_included ++ ;
-				}
-			}
-						
-			## find spike-in counts		
-			#if ($flag_indel ==0 && $muts_included >0 ){ #No indels
-			if ($muts_included >0 ){ #allow indels
-				# Initialize parameters
-				my $remain_spikein = 0;
-				my $count_ref=0;
-				my $muts_rep=$ins_count; 
+   ## find spike-in counts		
+   #if ($flag_indel ==0 && $muts_included >0 ){ #No indels
+   if ($muts_included >0 ){ #allow indels
+    # Initialize parameters
+    my $remain_spikein = 0;
+    my $count_ref=0;
+    my $muts_rep=$ins_count; 
+
+    # Read MD string in each read
+    my $md_str = $1 if $line =~ (/\tMD:Z:([\^\dACGT]+)\t/);
+    my @md_array = split(/[\^ACGT]+/,$md_str);
+    my $pos_start = $array[3];
+    pop(@md_array);
+	
+    # Measuring on-site mutations
+    foreach(@md_array){
+     my $pos_curr = $pos_start+$_;
+     $pos_start = $pos_start+$_+1;
+     my $sig=0;
+     if (exists $muts{$array[2].':'.$pos_curr}){
+      $count_ref++;
+     }
+    }
 				
-				# Read MD string in each read
-				my $md_str = $1 if $line =~ (/\tMD:Z:([\^\dACGT]+)\t/);
-				my @md_array = split(/[\^ACGT]+/,$md_str);
-				my $pos_start = $array[3];
-				pop(@md_array);
-				
-				# Measuring on-site mutations
-				foreach(@md_array){
-					my $pos_curr = $pos_start+$_;
-					$pos_start = $pos_start+$_+1;
-					my $sig=0;
-					if (exists $muts{$array[2].':'.$pos_curr}){
-						$count_ref++;
-					}
-				}
-				
-				# Measuring off-site mutations
-				$remain_spikein = $muts_included-$count_ref;
-				$muts_rep = $muts_rep+scalar(@md_array)-$count_ref;
-				
+    # Measuring off-site mutations
+    $remain_spikein = $muts_included-$count_ref;
+    $muts_rep = $muts_rep+scalar(@md_array)-$count_ref;
+	
+
+    ## More than 4 Spike-in mutation detected: M>=4 #####
+    my $muts_thres = int($mapped_seq/50)+1;	
 		
-		  		## More than 4 Spike-in mutation detected: M>=4 #####
-				my $muts_thres = int($mapped_seq/50)+1;	
+    if ($remain_spikein>=4 ){ 
+     #if on-site mutation (SICs) >4, labeled as high-confidence (M4 group)
+     $spk_count{'>=4'} ++ ;
+     if ($muts_rep < $muts_thres || $flag_clip < 5 || $flag_length>0){
+      # for umi reads, flag_clip did not work.
+      if (exists $high_reads{$array[0]}){
+       # for reads already paired, output to the final output with priority. 
+       print OFH_h $high_reads{$array[0]};
+       print OFH_h "M4\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
+       delete $high_reads{$array[0]};		
+      }else{
+       # append the reads into temp pool, waiting for its paired reads.
+       $high_reads{$array[0]}="M4\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
+       $reads_count_spk{$array[0]}=1;
+      }
+     }
+     #most M4 reads doesn't go through the double check with human reference.
+     if ($muts_rep > $muts_thres){
+      $doubt_sam{$line."\n"}=1
+      $dount_sam_ID{$array[0]}=$line."\n";
+     }else{
+      $reliable_sam{$line."\n"}=1
+     }
 				
-				if ($remain_spikein>=4 ){ 
-					#if on-site mutation (SICs) >4, labeled as high-confidence (M4 group)
-					$spk_count{'>=4'} ++ ;
-					if ($muts_rep < $muts_thres || $flag_clip < 5 || $flag_length>0){
-						# for umi reads, flag_clip did not work.
-						if (exists $high_reads{$array[0]}){
-							# for reads already paired, output to the final output with priority. 
-							print OFH_h $high_reads{$array[0]};
-							print OFH_h "M4\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
-							delete $high_reads{$array[0]};		
-						}else{
-							# append the reads into temp pool, waiting for its paired reads.
-							$high_reads{$array[0]}="M4\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
-							$reads_count_spk{$array[0]}=1;
-						}
-					}
-					#most M4 reads doesn't go through the double check with human reference.
-					if ($muts_rep > $muts_thres){
-						$doubt_sam{$line."\n"}=1
-						$dount_sam_ID{$array[0]}=$line."\n";
-					}else{
-						$reliable_sam{$line."\n"}=1
-					}
+    }elsif ($flag_clip <10){ 
+     #no two side (long) soft-clip, if umi-reads, automatically passed this criterion.
+     $spk_count{$remain_spikein}++;	
+     if ($remain_spikein == 3){
+      ## 3 Spike-in Mutation detected: M3
+      if ($count_ref <=1 && $muts_rep+$count_ref <= $muts_thres && $flag_length>0){ # (worst case) e.g., 4-3-1-1; 3-3-0-2;
+       if (exists $high_reads{$array[0]}){								
+        print OFH_h $high_reads{$array[0]};
+        print OFH_h "M3\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
+        delete $high_reads{$array[0]};
+								
+       }else{
+        $high_reads{$array[0]}="M3\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
+        $reads_count_spk{$array[0]}=1;
+       }
 					
-				}elsif ($flag_clip <10){ 
-					#no two side (long) soft-clip, if umi-reads, automatically passed this criterion.
-					$spk_count{$remain_spikein}++;	
-					if ($remain_spikein == 3){
-						## 3 Spike-in Mutation detected: M3
-						if ($count_ref <=1 && $muts_rep+$count_ref <= $muts_thres && $flag_length>0){ # (worst case) e.g., 4-3-1-1; 3-3-0-2;
-							if (exists $high_reads{$array[0]}){								
-								print OFH_h $high_reads{$array[0]};
-								print OFH_h "M3\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
-								delete $high_reads{$array[0]};
+       #all M3 reads go through the slow mode check;
+       $doubt_sam{$line."\n"}=1;
+       $dount_sam_ID{$array[0]}=$line."\n"; 
+      }
+     }elsif ($remain_spikein ==2){
+      ## 2 spike-in Mutation detected: M2
+      my $sig_M2 = 0;
+      # worst accpeted case: 2-2-0-1
+      $sig_M2 = 1 if ($count_ref ==0 && $muts_rep <=1 && $flag_length>0); 
+      # if 2-2-0-1, two-side clip not accepted. umi reads automatically passed the rule,
+      $sig_M2 = 0 if ($muts_rep ==1 && $flag_clip >5); 
+			
+      if ($sig_M2 == 1){
+       if (exists $high_reads{$array[0]}){								
+        print OFH_h $high_reads{$array[0]};
+        print OFH_h "M2\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
+        delete $high_reads{$array[0]};
 								
-							}else{
-								$high_reads{$array[0]}="M3\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
-								$reads_count_spk{$array[0]}=1;
-							}
-							
-							#all M3 reads go through the slow mode check;
-							$doubt_sam{$line."\n"}=1;
-							$dount_sam_ID{$array[0]}=$line."\n"; 
-						}
-					}elsif ($remain_spikein ==2){
-						## 2 spike-in Mutation detected: M2
-						my $sig_M2 = 0;
-						# worst accpeted case: 2-2-0-1
-						$sig_M2 = 1 if ($count_ref ==0 && $muts_rep <=1 && $flag_length>0); 
-						# if 2-2-0-1, two-side clip not accepted. umi reads automatically passed the rule,
-						$sig_M2 = 0 if ($muts_rep ==1 && $flag_clip >5); 
+       }else{
+        $high_reads{$array[0]}="M2\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
+        $reads_count_spk{$array[0]}=1;
+       }	
+      }
 						
-						if ($sig_M2 == 1){
-							if (exists $high_reads{$array[0]}){								
-								print OFH_h $high_reads{$array[0]};
-								print OFH_h "M2\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
-								delete $high_reads{$array[0]};
-								
-							}else{
-								$high_reads{$array[0]}="M2\t".$muts_included."\t".$remain_spikein."\t".$count_ref."\t".$muts_rep."\t".$line."\n";
-								$reads_count_spk{$array[0]}=1;
-							}	
-						}
-						
-						#all M2 reads go through the slow mode check;
-						$doubt_sam{$line."\n"}=1;
-						$dount_sam_ID{$array[0]}=$line."\n"; 
-					}
-				}
-			}
-		}
-	}
+      #all M2 reads go through the slow mode check;
+      $doubt_sam{$line."\n"}=1;
+      $dount_sam_ID{$array[0]}=$line."\n"; 
+     }
+    }
+   }
+  }
+ }
 }
 
 #unpaired (high quality) reads were put at the end of the file.
